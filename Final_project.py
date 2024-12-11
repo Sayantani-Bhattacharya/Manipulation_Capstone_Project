@@ -115,7 +115,7 @@ class Motion():
 
 
         Traj = Traj_1 + Traj_2 + Traj_3 + Traj_4 + Traj_5 + Traj_6 + Traj_7 + Traj_8
-        self.save_data(Traj)
+        # self.save_data(Traj)
         return Traj
     
     def convert_to_list(self,traj,N,gripper_state):
@@ -140,6 +140,7 @@ class Motion():
             list[i][12] = gripper_state
             Traj_result.append(list[i]) 
         return Traj_result      
+   
     # T_we_curr_actual input from the next state function.    
     def Feedback_Control(self, T_we_curr_actual, T_we_curr_ref, T_we_next_ref, Kp, Ki, timestep:int = 0.01):
         '''
@@ -325,6 +326,134 @@ class Motion():
         next_state = np.concatenate((chasis_config_next, joint_angle_next, wheel_angle_next, gripper_state))
         return next_state
     
+    def main_loop(self):
+
+        # Initial setup
+        cube_init_conf = [1,0,0]
+        cube_final_conf = [0,1,-np.pi/2]
+        bot_actual_init_conf = [1,0,0]
+        traj_matrix = []
+        Kp = np.zeros((6,))
+        Ki = np.zeros((6,))
+        timestep = 0.01
+        # Total time of the motion in seconds from rest to rest
+        Tf = 4         
+        # initial configuration of the end-effector reference trajectory
+        T_we = np.array([[0, 0, 1, 0],
+                        [0, 1, 0, 0],
+                        [-1, 0, 0, 0.5],
+                        [0, 0, 0, 1]])   #------------------ was given for this part - see
+        self.prev_state_actual = T_we
+        self.prev_state_ref = T_we
+
+        Tsb = np.array([[1, 0, 0, 0],
+                        [0, 1, 0, 0],
+                        [0, 0, 1, 0.0963],
+                        [0, 0, 0, 1]])
+
+        Tb0 = np.array([[1, 0, 0, 0.1662],
+                        [0, 1, 0, 0],
+                        [0, 0, 1, 0.0026],
+                        [0, 0, 0, 1]])
+        
+        M0e = np.array([[1, 0, 0, 0.033],
+                        [0, 1, 0, 0],
+                        [0, 0, 1, 0.6546],
+                        [0, 0, 0, 1]])
+
+        Tse_ini = Tsb.dot(Tb0).dot(M0e)
+
+        Tsc_ini = np.array([[1, 0, 0, 1],
+                            [0, 1, 0, 0],
+                            [0, 0, 1, 0.025],
+                            [0, 0, 0, 1]])
+        
+        Tsc_fin = np.array([[0, 1, 0, 0],
+                            [-1, 0, 0, -1],
+                            [0, 0, 1, 0.025],
+                            [0, 0, 0, 1]]) 
+
+        Tce_grp = np.array([[ -np.sqrt(2)/2, 0, np.sqrt(2)/2, 0],
+                            [ 0, 1, 0, 0],
+                            [-np.sqrt(2)/2, 0, -np.sqrt(2)/2, 0],
+                            [ 0, 0, 0, 1]])
+
+        Tce_sta = np.array([[ -np.sqrt(2)/2, 0, np.sqrt(2)/2,   0],
+                            [ 0, 1, 0,   0],
+                            [-np.sqrt(2)/2, 0, -np.sqrt(2)/2, 0.15],  
+                            [ 0, 0, 0,   1]])
+        
+        # J_e: Jacobian matrix | 6*9  ||  J_e_pinv: 9*6
+        J_e = np.array([
+            [0.030, -0.030, -0.030, 0.030, -0.985, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, -1, -1, -1, 0],
+            [-0.005, 0.005, 0.005, -0.005, 0.170, 0, 0, 0, 1],
+            [0.002, 0.002, 0.002, 0.002, 0, -0.240, -0.214, -0.218, 0],
+            [-0.024, 0.024, 0, 0, 0.221, 0, 0, 0, 0],
+            [0.012, 0.012, 0.012, 0.012, 0, -0.288, -0.135, 0, 0]
+            ])
+        
+        # The number of trajectory reference configurations per 0.01 seconds(1)
+        k = 1
+        # motion = Motion()
+
+        # For feedforward:
+        Kp = np.zeros((6,))
+        Ki = np.zeros((6,))
+
+        # For feedback:
+        # Now add a positive-definite diagonal proportional gain matrix K p while keeping the integral gains zero.
+        #  You can keep the gains "small" initially so the behavior is not much different from the 
+        # case of feedforward control only. As you increase the gains, can you see some corrective effect due to the 
+        # proportional control? 
+
+        # experiment with all the options.
+
+        # Eventually you will have to design a controller so that essentially all initial error is driven 
+        # to zero by the end of the first trajectory segment; otherwise, your grasp operation may fail. 
+
+
+
+        # Todo: Manage k and timesteps at all parts well.
+
+        # Gripper/end-effector trajectory
+        ref_traj = self.TrajectoryGenerator(T_we_init = Tse_ini, T_wc_init = Tsc_ini, T_wc_final = Tsc_fin, T_ce_grasp = Tce_grp, T_ce_standoff = Tce_sta, k=k)
+
+        self.Final_traj_matrix = []
+        # Main loop
+        for i in range(len(ref_traj)):
+            T_desired = ref_traj[i] [some part conversion]   
+            gripper_state =  ref_traj[i] [11/12]  
+
+            # chasis motion.
+
+            cmd_twist_e = self.Feedback_Control(T_we_curr_actual = self.prev_state_actual, T_we_curr_ref = self.prev_state_ref, T_we_next_ref = T_desired, Kp=Kp, Ki=Ki, timestep = timestep)
+            # Computing pseudoinverse of the Jacobian.
+            J_e_pinv = np.linalg.pinv(J_e)
+            # Comanded speed
+            cmd_vel = J_e_pinv @ cmd_twist_e
+            u = cmd_vel[0:4]
+            theta_dot = cmd_vel[4:10]
+
+            control_params = u + theta_dot [modified]
+            
+            self.current_config = self.NextState(current_config, control_param = control_params , timestep=timestep, max_angular_speed = 10)
+            traj_instant = current_config + gripper_state
+            self.Final_traj_matrix.append(traj_instant)
+            
+            self.prev_state_actual = self.current_config [ modified]
+            self.prev_state_ref = self.current_config [ modified 2]
+
+
+        
+        self.save_data(self.Final_traj_matrix)
+
+
+        # Choose an initial configuration of the youBot so that the end-effector has at least 30 degrees of 
+        # orientation error and 0.2 m of position error.
+
+    
+        
 
 def test_traj_generator():
     motion = Motion()
@@ -433,7 +562,7 @@ def test_next_state():
         Traj.append(traj_instant)
     motion.save_data(Traj)
 
-def main_loop():
+def test_main_loop():
     # Initial setup
     cube_init_conf = [1,0,0]
     cube_final_conf = [0,1,-np.pi/2]
@@ -442,98 +571,26 @@ def main_loop():
     Kp = np.zeros((6,))
     Ki = np.zeros((6,))
     # Total time of the motion in seconds from rest to rest
-    Tf = 4 
-
-    
-
-
-
-
-
-    
+    Tf = 4  
+   
     # initial configuration of the end-effector reference trajectory
     T_we = np.array([[0, 0, 1, 0],
                     [0, 1, 0, 0],
                     [-1, 0, 0, 0.5],
                     [0, 0, 0, 1]])   #------------------ was given for this part - see
-    
-    Tsb = np.array([[1, 0, 0, 0],
-                    [0, 1, 0, 0],
-                    [0, 0, 1, 0.0963],
-                    [0, 0, 0, 1]])
-
-    Tb0 = np.array([[1, 0, 0, 0.1662],
-                    [0, 1, 0, 0],
-                    [0, 0, 1, 0.0026],
-                    [0, 0, 0, 1]])
-    
-    M0e = np.array([[1, 0, 0, 0.033],
-                    [0, 1, 0, 0],
-                    [0, 0, 1, 0.6546],
-                    [0, 0, 0, 1]])
-
-    Tse_ini = Tsb.dot(Tb0).dot(M0e)
-
-    Tsc_ini = np.array([[1, 0, 0, 1],
-                        [0, 1, 0, 0],
-                        [0, 0, 1, 0.025],
-                        [0, 0, 0, 1]])
-    
-    Tsc_fin = np.array([[0, 1, 0, 0],
-                        [-1, 0, 0, -1],
-                        [0, 0, 1, 0.025],
-                        [0, 0, 0, 1]]) 
-
-    Tce_grp = np.array([[ -np.sqrt(2)/2, 0, np.sqrt(2)/2, 0],
-                        [ 0, 1, 0, 0],
-                        [-np.sqrt(2)/2, 0, -np.sqrt(2)/2, 0],
-                        [ 0, 0, 0, 1]])
-
-    Tce_sta = np.array([[ -np.sqrt(2)/2, 0, np.sqrt(2)/2,   0],
-                        [ 0, 1, 0,   0],
-                        [-np.sqrt(2)/2, 0, -np.sqrt(2)/2, 0.15],  
-                        [ 0, 0, 0,   1]])
+   
     
     # The number of trajectory reference configurations per 0.01 seconds(1)
     k = 1
 
-    # Main loop
     motion = Motion()
-    # Todo: Manage k and timesteps at all parts well.
-    ref_traj = motion.TrajectoryGenerator(T_we_init = Tse_ini, T_wc_init = Tsc_ini, T_wc_final = Tsc_fin, T_ce_grasp = Tce_grp, T_ce_standoff = Tce_sta, k=k)
-
-    for i in range(k):
-        traj_row = motion.Feedback_Control()
-        motion.NextState()
-        traj_matrix.append(traj_row)
-    
-    # the data saved needs to be T_se vals (like from traj_generator)
-    motion.save_data(traj_matrix)
+    # pass in cube init, final kp, ki, dt, stuff..
+    motion.main_loop()
 
 
 
 
 
-    # Other variants:
-
-    # Choose an initial configuration of the youBot so that the end-effector has at least 30 degrees of 
-    # orientation error and 0.2 m of position error.
-
-    # For feedforward:
-    Kp = np.zeros((6,))
-    Ki = np.zeros((6,))
-
-    # For feedback:
-    # Now add a positive-definite diagonal proportional gain matrix K p while keeping the integral gains zero.
-    #  You can keep the gains "small" initially so the behavior is not much different from the 
-    # case of feedforward control only. As you increase the gains, can you see some corrective effect due to the 
-    # proportional control? 
-
-    # experiment with all the options.
-
-    # Eventually you will have to design a controller so that essentially all initial error is driven 
-    # to zero by the end of the first trajectory segment; otherwise, your grasp operation may fail. 
-
-test_traj_generator()
+test_main_loop()
 
 
