@@ -26,8 +26,8 @@ class Motion():
                         (x, y): location of its center. 
 
         control_param (9-np array) : representing the controls
-                    1. wheel speeds (4 variables).
-                    2. arm joint speeds (5 variables).
+                    1. arm joint speeds (5 variables).
+                    2. wheel speeds (4 variables).                     
 
         timestep (int) : The time interval for updation of the Euler function.
 
@@ -76,7 +76,6 @@ class Motion():
         wheel_speed = control_param[5:9]
         wheel_angle_next = wheel_angles + wheel_speed * timestep  
 
-        # HEREEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
         u = wheel_angle_next
         # should u be wheel_angle_next - wheel_angle ?
         q = chasis_config
@@ -115,18 +114,6 @@ class Motion():
         # New chassis configuration q
         chasis_config_next = chasis_config  + dq * timestep   #timestep ?
 
-        # # qdot = np.array([0,0,0])
-        # # # u = H * Vb
-        # # Vb = u / H
-        # qdot_transform_matrix = np.array([1,0,0],
-        #                      [0,np.cos(q[0]), np.sin(q[0])],
-        #                      [0, -1*np.sin(q[0]), np.cos(q[0])])
-
-        # # Vb = qdot * qdot_transform_matrix        
-        # qdot = Vb * np.linalg.inv(qdot_transform_matrix)
-
-        # chasis_config_next = chasis_config + qdot * timestep
-
         gripper_state = np.array([0]) #open
         next_state = np.concatenate((chasis_config_next, joint_angle_next, wheel_angle_next, gripper_state))
         return next_state
@@ -138,7 +125,7 @@ class Motion():
         '''
         data_log = np.array(data)
         print("Generating animation csv file")
-        np.savetxt('simulation_data.csv', data_log, delimiter=',', fmt='%.6f')
+        np.savetxt('simulation_dataCA2.csv', data_log, delimiter=',', fmt='%.6f')
 
     
 
@@ -147,7 +134,7 @@ def main():
     Traj = []
 
     # Setting initial values
-    control_param = np.array([2,2,2,2,2,2,2,2,2])
+    control_param = np.array([2,2,2,2,2,-10,10,-10,10])
     current_config = np.array([0,0,0,0,0,0,0,0,0,0,0,0])
 
     T = 1 #in secs
