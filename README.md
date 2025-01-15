@@ -5,7 +5,8 @@ location, achieve a reasonable odometry for the mobile base, carry the cube to t
 and place it down in correct orientation. And lastly, visualize the whole motion in Coppelia-Sim
 software.
 
-### Simulation: [Link](https://github.com/Sayantani-Bhattacharya/Manipulation_Capstone_Project/issues/2")
+### Simulation: [Link]("https://github.com/Sayantani-Bhattacharya/Manipulation_Capstone_Project/issues/2#issue-2788585978").
+
 
 ### Main Segments:
 1. Planning a trajectory for the end-effector of the youBot mobile manipulator.
